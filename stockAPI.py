@@ -1,88 +1,137 @@
-import requests
+import yfinance as yf
 import pandas as pd
-from io import StringIO
-import numpy as np
+import matplotlib.pyplot as plt
 import pprint
-
-#79LYIIN6023AXMH8
-chave_api = "79LYIIN6023AXMH8"
-
-acoes = ['ITUB4']
-acao = 'ITUB4'
-margem_anos = 5
-dividendo_desejado_porc = 0.06
-
-# url_earnings_quote = f'https://www.alphavantage.co/query?function=EARNINGS&symbol=IBM&apikey=demo'
-# r_earnings_quote = requests.get(url_earnings_quote)
-
-def convert_to_float(lst):
-    return [float(item['reportedEPS']) for item in lst]
+from functools import reduce
+from datetime import datetime, timedelta
 
 
-url_global_quote = 'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=IBM&apikey=demo'
-# url_global_quote = f'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={acao}.SAO&apikey={chave_api}'
-r_global_quote = requests.get(url_global_quote)
-if r_global_quote.status_code == 200:
-    # pprint.pprint(r_global_quote.json())
-    dados_global_quote = r_global_quote.json()
-    preco_atual = float(dados_global_quote['Global Quote']['05. price'])
-else:
-    print(f"Falha ao obter dados do GLOBAL_QUOTE para {acao}")
+def fetch_stock_info(ticker):
+    stock = yf.Ticker(ticker)
+    info = stock.info
+    return info
 
-url_earnings = 'https://www.alphavantage.co/query?function=EARNINGS&symbol=IBM&apikey=demo'
-# url_earnings = f'https://www.alphavantage.co/query?function=EARNINGS&symbol={acao}&apikey={chave_api}'
-r_earnings = requests.get(url_earnings)
-if r_earnings.status_code == 200:
-    dados_earnings = r_earnings.json()
-    # pprint.pprint(dados_earnings)
-    # get avg eps
-    eps_values = convert_to_float(dados_earnings['annualEarnings'])
-    eps_recent_years = eps_values[:margem_anos]
-    eps_average = sum(eps_recent_years) / len(eps_recent_years)
+def fetch_historical_earnings(ticker):
+    stock = yf.Ticker(ticker)
+    earnings = stock.dividends
+    return earnings
 
-    ultima_entrada_anual = dados_earnings['annualEarnings'][0] 
-    eps = float(ultima_entrada_anual['reportedEPS'])
-else:
-    print(f"Falha ao obter dados de ganhos para {acao}")
+def fetch_plot_data(ticker, start_date, end_date):
+    stock_data = yf.download(ticker, start=start_date, end=end_date)
+    return stock_data
 
-url_overview = 'https://www.alphavantage.co/query?function=OVERVIEW&symbol=IBM&apikey=demo'
-# url_overview = f'https://www.alphavantage.co/query?function=OVERVIEW&symbol={acao}&apikey={chave_api}'
-r_overview = requests.get(url_overview)
-if r_overview.status_code == 200:
-    dados_overview = r_overview.json()
-    pprint.pprint(dados_overview)
-    beta = float(dados_overview.get('Beta', 1))  # Se não houver beta, assumimos 1 para evitar divisão por zero
-    diluted_eps = float(dados_overview.get('DilutedEPSTTM', 0))
-
-    dividend_per_share = float(dados_overview.get('DividendPerShare', 0))
+def plot_stock_data(stock_data, ticker):
+    plt.figure(figsize=(14, 7))
+    plt.plot(stock_data['Close'], label='Close Price')
+    plt.title(f'{ticker} Preço da ação')
+    plt.xlabel('Data')
+    plt.ylabel('Preço')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
     
-    book_value = float(dados_overview.get('BookValue', 0))
-    profit_margin = float(dados_overview.get('ProfitMargin', 0))
+    
+#------------------ User input ------------------#
+ticker = 'TAEE11.SA' 
+months = 3 # Quantidade de meses considerados para montar o gráfico
+
+start_date = (datetime.now() - timedelta(days=months*30)).strftime('%Y-%m-%d') 
+end_date = datetime.now().strftime('%Y-%m-%d')
+
+#------------------------------------------------#
+
+info = fetch_stock_info(ticker)
+earnings = fetch_historical_earnings(ticker)
+stock_plot_data = fetch_plot_data(ticker, start_date, end_date)
+
+def calculate_average_dividend(earnings, num_years=5):
+    df = pd.DataFrame({'Date': earnings.index, 'Dividends': earnings.values})
+    df['Date'] = pd.to_datetime(df['Date'])
+    df['Year'] = df['Date'].dt.year
+    yearly_averages = df.groupby('Year')['Dividends'].sum()
+
+    # Usando uma função lambda de alta ordem para calcular a média
+    yearly_dividend_avg = (lambda x: (lambda y: y[-num_years:].mean() if len(y) >= num_years else None)(x))(yearly_averages)
+
+    if yearly_dividend_avg is None:
+        print(f"Sem informações suficientes para calcular a média dos dividendos nos últimos {num_years} anos.")
+    
+    return yearly_dividend_avg
+
+average_eps = calculate_average_dividend(earnings)
+
+# Currying com funções lambda
+calculate_projected_ceiling_price = (lambda x: (lambda y: y / 0.06 if y else None))(average_eps)
+projected_ceiling_price = calculate_projected_ceiling_price(average_eps)
+
+if projected_ceiling_price:
+    print(f"Preço teto projetivo: {projected_ceiling_price:.2f}")
 else:
-    print(f"Falha ao obter dados do OVERVIEW para {acao}")
+    print("Preço teto projetivo: Informações não disponíveis")
 
-print(f"Preço atual: {preco_atual}")
-print(f"eps: {eps}")
+p_e_ratio = info.get('trailingPE')
+profit_margin = info.get('profitMargins')
+dividend_yield = info.get('dividendYield') * 100  
+dividend_per_share = info.get('dividendRate')
+book_value = info.get('currentPrice')
+eps = info.get('trailingEps')
 
-p_e_ratio = preco_atual / diluted_eps
-graham_number = np.sqrt(22.5 * diluted_eps * book_value)
-dividend_yield = (dividend_per_share / preco_atual) * 100  # Em percentual
-margin_of_safety = (book_value - preco_atual) / book_value * 100  # Em percentual
-graham_formula_value = diluted_eps * (8.5 + 2 * beta)
-# intrinsic_value = graham_formula_value * (4.4 / yield_rate)
+# Usando List Comprehension dentro de uma lambda
+graham_formula_value = (lambda eps, bv: (lambda e, b: (22.5 * e * b) ** 0.5 if e and b else None)(eps, book_value))(eps, book_value)
 
-preco_teto_proj = eps_average / dividendo_desejado_porc
+# Dicionário dentro do escopo de uma função lambda
+peter_lynch_ratio = (lambda d: d['pe'] / (d['gr'] * 100) if d['pe'] and d['gr'] else None)({'pe': p_e_ratio, 'gr': 0.10})
+
+# Usando uma função lambda recursiva para calcular o total de dividendos acumulados
+total_dividends = (lambda f: (lambda x: f(lambda y: x(x)(y)))(lambda x: f(lambda y: x(x)(y))))(lambda f: lambda data: 0 if not data else data[0] + f(data[1:]))
+dividends_data = earnings.values.tolist() 
+total_dividends_accumulated = total_dividends(dividends_data)
+
+# Usando `reduce` como um functor
+dividends_sum = reduce(lambda x, y: x + y, earnings, 0)
+
+# Usando o monad lambda
+maybe_monad = (lambda value: (lambda func: None if value is None else func(value))) 
+
+monad_result = maybe_monad(average_eps)(lambda x: x / 0.06 if x else None)
 
 
-peter_lynch_ratio = (preco_atual / eps) * 0.10  # Assumindo uma taxa de crescimento de 10%
-
+print("\nInformações sobre a ação:")
+print(f"Ticker: {ticker}")
 print(f"Preço/Lucro: {p_e_ratio:.2f}")
-print(f"Margem de segurança: {margin_of_safety:.2f}%")
 print(f"Margem de lucro: {profit_margin:.2f}%")
 print(f"Dividendos por ação: {dividend_per_share}")
 print(f"Valor por ação: {book_value}")
-print(f"Relação Peter Lynch: {peter_lynch_ratio:.2f}")
-print(f"Valor intrínseco Graham: {graham_formula_value:.2f}")
-print(f"preço teto projetivo: {preco_teto_proj:.2f} ")
 print(f"Dividend Yield: {dividend_yield:.2f}%")
 
+print("\nAnálise da ação:")
+if graham_formula_value:
+    print(f"Valor intrínseco Graham: {graham_formula_value:.2f}")
+else:
+    print("Valor intrínseco Graham: Informações não disponíveis")
+
+if peter_lynch_ratio:
+    print(f"Relação Peter Lynch: {peter_lynch_ratio:.2f}")
+else:
+    print("Relação Peter Lynch: Informações não disponíveis")
+
+if projected_ceiling_price:
+    print(f"Preço teto projetivo: {projected_ceiling_price:.2f}")
+else:
+    print("Preço teto projetivo: Informações não disponíveis")
+
+print("\noutros:")
+if total_dividends_accumulated is not None:
+    print(f"Total de dividendos acumulados: {total_dividends_accumulated}")
+else:
+    print("Total de dividendos acumulados: Informações não disponíveis")
+
+print(f"Soma total dos dividendos: {dividends_sum}")
+
+if monad_result is not None:
+    print(f"Resultado do Monad: {monad_result:.2f}")
+else:
+    print("Resultado do Monad: Informações não disponíveis")
+    
+
+plot_stock_data(stock_plot_data, ticker)
