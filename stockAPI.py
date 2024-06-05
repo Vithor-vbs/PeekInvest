@@ -32,7 +32,7 @@ def plot_stock_data(stock_data, ticker):
     
     
 #------------------ User input ------------------#
-ticker = 'VALE3.SA'
+ticker = 'BBAS3.SA'
 months = 3 # Quantidade de meses considerados para montar o gráfico
 
 start_date = (datetime.now() - timedelta(days=months*30)).strftime('%Y-%m-%d') 
@@ -53,8 +53,8 @@ def calculate_average_dividend(earnings, num_years=5):
     df['Year'] = df['Date'].dt.year
     yearly_averages = df.groupby('Year')['Dividends'].sum()
 
-    # Usando uma função lambda de alta ordem para calcular a média
-    yearly_dividend_avg = (lambda x: (lambda y: y[-num_years:].mean() if len(y) >= num_years else None)(x))(yearly_averages)
+    # Usando list comprehension em lambda para calcular a média
+    yearly_dividend_avg = sum([dividend for dividend in yearly_averages[-num_years:]]) / num_years if len(yearly_averages) >= num_years else None
 
     if yearly_dividend_avg is None:
         print(f"Sem informações suficientes para calcular a média dos dividendos nos últimos {num_years} anos.")
@@ -74,7 +74,7 @@ dividend_per_share = info.get('dividendRate')
 book_value = info.get('currentPrice')
 eps = info.get('trailingEps')
 
-# Usando List Comprehension dentro de uma lambda
+# Usando lambda alta ordem
 graham_formula_value = (lambda eps, bv: (lambda e, b: (22.5 * e * b) ** 0.5 if e and b else None)(eps, book_value))(eps, book_value)
 
 # Dicionário dentro do escopo de uma função lambda
