@@ -1,4 +1,4 @@
-# Documentação de Requisitos do Sistema
+# Documentação do projeto StockWise
 
 Sistema que obtém informações de ações da bolsa de valores e realiza cálculos de diversos índices financeiros, para que o investidor saiba se é um bom momento de compra/venda do papel.
 O código também também fornece um gráfico de histórico de preços dado um comprimento de tempo.
