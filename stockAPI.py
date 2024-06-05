@@ -32,11 +32,14 @@ def plot_stock_data(stock_data, ticker):
     
     
 #------------------ User input ------------------#
-ticker = 'TAEE11.SA' 
+ticker = 'VALE3.SA'
 months = 3 # Quantidade de meses considerados para montar o gráfico
 
 start_date = (datetime.now() - timedelta(days=months*30)).strftime('%Y-%m-%d') 
 end_date = datetime.now().strftime('%Y-%m-%d')
+
+desired_dividend_yield = 0.06
+years_to_consider = 5
 
 #------------------------------------------------#
 
@@ -58,16 +61,11 @@ def calculate_average_dividend(earnings, num_years=5):
     
     return yearly_dividend_avg
 
-average_eps = calculate_average_dividend(earnings)
+average_eps = calculate_average_dividend(earnings, years_to_consider)
 
 # Currying com funções lambda
-calculate_projected_ceiling_price = (lambda x: (lambda y: y / 0.06 if y else None))(average_eps)
+calculate_projected_ceiling_price = (lambda x: (lambda y: y / desired_dividend_yield if y else None))(average_eps)
 projected_ceiling_price = calculate_projected_ceiling_price(average_eps)
-
-if projected_ceiling_price:
-    print(f"Preço teto projetivo: {projected_ceiling_price:.2f}")
-else:
-    print("Preço teto projetivo: Informações não disponíveis")
 
 p_e_ratio = info.get('trailingPE')
 profit_margin = info.get('profitMargins')
